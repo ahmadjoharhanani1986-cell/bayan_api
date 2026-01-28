@@ -1,0 +1,4 @@
+{
+    "ConnectionString": "Server=.\\SQLEXPRESS;Database=bayan_db;User Id=sql_user;Password=sqlexpress@123456;",
+    "MasterConnectionString": "Server=.\\SQLEXPRESS;Database=masterDb;User Id=sql_user;Password=sqlexpress@123456;"
+}

@@ -1,0 +1,37 @@
+# here goes quick api tests
+@host = localhost
+@port = 5001
+GET http://{{host}}:{{port}}/api/User/Query/status=-1
+###
+GET http://{{host}}:{{port}}/api/User/UserRoles
+###
+POST http://{{host}}:{{port}}/api/User/Query
+Content-Type: application/json
+
+{
+    "status": -1,
+}
+###
+POST http://{{host}}:{{port}}/api/Category/Query
+Content-Type: application/json
+
+{
+}
+###
+GET http://{{host}}:{{port}}/api/User/UserRoles
+###
+GET http://{{host}}:{{port}}/api/Permission/GetNextPermissionCode
+###
+POST http://{{host}}:{{port}}/api/UserRolesPermissions/Query
+Content-Type: application/json
+
+{
+}
+###
+POST http://{{host}}:{{port}}/api/Project/QueryIdName
+Content-Type: application/json
+
+{
+    "status": -1,
+}
+###
