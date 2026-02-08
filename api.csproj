@@ -31,11 +31,6 @@
     <PackageReference Include="System.ServiceModel.Primitives" Version="8.1.2" />
     <PackageReference Include="System.ServiceModel.Security" Version="6.0.0" />
   </ItemGroup>
-  <ItemGroup>
-    <Reference Include="Hasp">
-      <HintPath>Hasp.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 <!-- <ItemGroup>
   <Reference Include="ShamelLightDll">
     <HintPath>lib\ShamelLightDll.dll</HintPath>
