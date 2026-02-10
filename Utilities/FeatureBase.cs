@@ -12,6 +12,6 @@ public class FeatureBase
 
 public class FeatureHandlerBase
 {
-    protected IShamelDatabase _con;  protected IMasterDatabase _conMaster;
+    protected IShamelDatabase _con;
     public FeatureHandlerBase(IShamelDatabase con) => _con = con;
 }

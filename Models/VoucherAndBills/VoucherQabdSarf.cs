@@ -66,65 +66,76 @@ namespace SHLAPI.Models.VoucherQabdSarf
         {
             try
             {
-                // 1) Currencies
-                var currencies = await db.QueryAsync<Currency_M>(
-                    "SELECT id, name FROM Currency ORDER BY id ASC", transaction: trans);
+               // 1) Currencies
+var currencies = await db.QueryAsync<Currency_M>(
+    "SELECT id, name FROM Currency ORDER BY id ASC",
+    transaction: trans);
 
-                // 2) Payment Types
-                var paymentTypes = await db.QueryAsync<PaymentType_M>(
-                    "SELECT id, name FROM Payment_Types ORDER BY name ASC", transaction: trans);
+// 2) Payment Types
+var paymentTypes = await db.QueryAsync<PaymentType_M>(
+    "SELECT id, name FROM Payment_Types ORDER BY name ASC",
+    transaction: trans);
 
-                // 3) User Treasury
-                var userTreasury = await db.QueryAsync<UserTreasury_M>(
-                    "SELECT id, user_id as UserId, currency_id as CurrencyId, cash_account_id ,check_account_id,notes " +
-                    "FROM Users_Treasury_Rights WHERE user_id=@userId AND currency_id=@currencyId",
-                    new { userId, currencyId },
-                    transaction: trans);
+// 3) User Treasury
+var userTreasury = await db.QueryAsync<UserTreasury_M>(
+    @"SELECT 
+        id, 
+        user_id AS UserId, 
+        currency_id AS CurrencyId, 
+        cash_account_id, 
+        check_account_id, 
+        notes 
+      FROM Users_Treasury_Rights 
+      WHERE user_id=@userId AND currency_id=@currencyId",
+    new { userId, currencyId },
+    transaction: trans);
 
-                // 4) Max Voucher Number
-                string sql = type == "V"
-                    ? "SELECT ISNULL(MAX(no),0) FROM Internal_Consingment"
-                    : "SELECT ISNULL(MAX(no),0) FROM Vouchers_And_Bills WHERE type=@type";
+// 4) Max Voucher Number (MySQL version)
+string sql = type == "V"
+    ? "SELECT IFNULL(MAX(no),0) FROM Internal_Consingment"
+    : "SELECT IFNULL(MAX(no),0) FROM Vouchers_And_Bills WHERE type=@type";
 
-                var maxVoucherNo = await db.ExecuteScalarAsync<string>(
-                    sql,
-                    new { type },
-                    transaction: trans);
+var maxVoucherNo = await db.ExecuteScalarAsync<string>(
+    sql,
+    new { type },
+    transaction: trans);
+    if(maxVoucherNo=="0")maxVoucherNo = type + "00000000";
 
-                // 5) Currency Fraction Count
-                var units = await db.ExecuteScalarAsync<string>(
-                    "SELECT units FROM Currency WHERE id=@id",
-                    new { id = currencyId },
-                    transaction: trans);
-                int fractionCount = (units ?? "").Length > 0 ? units.Length - 1 : 0;
+// 5) Currency Fraction Count
+var units = await db.ExecuteScalarAsync<string>(
+    "SELECT units FROM Currency WHERE id=@id",
+    new { id = currencyId },
+    transaction: trans);
 
-                // 6) Banks
-                var banks = await db.QueryAsync<Bank_M>(
-                    "SELECT id, name FROM Banks ORDER BY no",
-                    transaction: trans);
+int fractionCount = !string.IsNullOrEmpty(units) ? units.Length - 1 : 0;
 
-                // 7) Branches
-                var branches = await db.QueryAsync<Branch_M>(
-                    "SELECT id, name FROM Bank_Branches",
-                    transaction: trans);
+// 6) Banks
+var banks = await db.QueryAsync<Bank_M>(
+    "SELECT id, name FROM Banks ORDER BY no",
+    transaction: trans);
 
-                // 8) Delegate
-                var delegats = await db.QueryAsync<Delegate_M>(
-                    "SELECT id, name FROM Delegates",
-                    transaction: trans);
+// 7) Branches
+var branches = await db.QueryAsync<Branch_M>(
+    "SELECT id, name FROM Bank_Branches",
+    transaction: trans);
 
+// 8) Delegates
+var delegats = await db.QueryAsync<Delegate_M>(
+    "SELECT id, name FROM Delegates",
+    transaction: trans);
 
-                return new VoucherQabdSarf_M
-                {
-                    Currencies = currencies,
-                    PaymentTypes = paymentTypes,
-                    UserTreasury = userTreasury,
-                    MaxVoucherNo = maxVoucherNo,
-                    CurrencyFractionCount = fractionCount,
-                    Banks = banks,
-                    Branches = branches,
-                    delegates = delegats
-                };
+// Return object
+return new VoucherQabdSarf_M
+{
+    Currencies = currencies,
+    PaymentTypes = paymentTypes,
+    UserTreasury = userTreasury,
+    MaxVoucherNo = maxVoucherNo,
+    CurrencyFractionCount = fractionCount,
+    Banks = banks,
+    Branches = branches,
+    delegates = delegats
+};
 
 
             }

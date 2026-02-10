@@ -9,43 +9,67 @@ namespace SHLAPI.Models.SearchVouchers
 {
     public class SearchVouchers_M
     {
-        public static async Task<IEnumerable<dynamic>> GetData(IDbConnection db, IDbTransaction trans, string voucherType, string filterText)
+public static async Task<IEnumerable<dynamic>> GetData(IDbConnection db, IDbTransaction trans, string voucherType, string filterText)
+{
+    try
+    {
+        // Base SQL
+        string sql = @"
+            SELECT DISTINCT 
+                V.id AS voucher_id,
+                V.no AS voucher_no,
+                V.person_account_id AS receiverpayer_id,
+                V.person_name AS receiverpayer_name,
+                C.id AS depitcredit_id,
+                C.name AS depitcredit_name,
+                DATE_FORMAT(V.date, '%Y-%m-%d') AS date,
+                V.payment_type_id AS payment_id,
+                PT.name AS payment_type,
+                V.total_amount AS payment_amount,
+                V.curr_id AS currency_id,
+                CUR.name AS currency_name,
+                V.manual_voucher_no AS manual_journal,
+                V.cash_amount AS cach,
+                V.check_amount AS `check`,
+                V.status,
+                V.type AS voucher_type
+            FROM Vouchers_And_Bills V
+            LEFT JOIN ChartOfAccount C ON C.id = V.person_account_id
+            LEFT JOIN Payment_Types PT ON V.payment_type_id = PT.id
+            LEFT JOIN Currency CUR ON V.curr_id = CUR.id
+            LEFT JOIN vouchers_items_and_services VIS ON VIS.voucher_id = V.id
+            WHERE V.type = @VoucherType
+              AND V.status = 0
+        ";
+
+        // Dynamic filter
+        var parameters = new DynamicParameters();
+        parameters.Add("VoucherType", voucherType);
+
+        if (!string.IsNullOrWhiteSpace(filterText))
         {
-            try
-            {
-                string where = string.Format(" ( (Vouchers_And_Bills.type='{0}' ))", voucherType);
-                if (filterText != null && filterText.Trim().Length > 0)
-                {
-                    string str = " and (" + Search_Specific(filterText.Trim(), "Vouchers_And_Bills.person_name") + "";    
-                    where += str;
-                    string account_print_name = " or "+ Search_Specific(filterText.Trim(), "Vouchers_And_Bills.account_print_name"); 
-                    where += account_print_name;  
-                     string code = " or "+ Search_Specific(filterText.Trim(), "Vouchers_And_Bills.no")+")"; 
-                      where += code; 
-                }
-
-                where += " AND Vouchers_And_Bills.status=0 order by Vouchers_And_Bills.id desc ";
-                string spName = "SelectVouchers_ByWhere_sp";
-                var param = new
-                {
-                    where
-                };
-                var res = await db.QueryAsync<dynamic>(
-                     spName,
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                return res;
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
+            filterText = $"%{filterText.Trim()}%";
+            sql += @"
+              AND (
+                  V.person_name LIKE @Filter
+                  OR V.account_print_name LIKE @Filter
+                  OR V.no LIKE @Filter
+              )
+            ";
+            parameters.Add("Filter", filterText);
         }
-        
 
+        sql += " ORDER BY V.id DESC";
 
+        // Execute query
+        var res = await db.QueryAsync<dynamic>(sql, parameters, trans);
+        return res;
+    }
+    catch (Exception ex)
+    {
+        throw;
+    }
+}
 
         public static string Search_Specific(string str, string fieldName)
         {

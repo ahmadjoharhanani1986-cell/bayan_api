@@ -44,92 +44,101 @@ namespace SHLAPI.Models.InvoiceVoucher
             public int Id { get; set; }
             public string Name { get; set; }
         }
-        public static async Task<InvoiceVoucher_M> LoadInvoiceData(
-            IDbConnection db,
-            IDbTransaction trans,
-            int userId,
-            int currencyId,
-            string type)
+ public static async Task<InvoiceVoucher_M> LoadInvoiceData(
+ IDbConnection db, IDbTransaction trans, 
+    int userId,
+    int currencyId,
+    string type)
+{
+    try
+    {
+        // 1) Settings
+        List<Settings_M> settingList = (List<Settings_M>)await Settings_M.GetData(db, trans);
+
+        // 2) Currencies
+        var currencies = await db.QueryAsync<Currency_M>(
+            "SELECT id, name, CHAR_LENGTH(units) AS fractionCount FROM Currency ORDER BY id ASC",
+            transaction: trans);
+
+        // 3) Payment Types
+        var paymentTypes = await db.QueryAsync<PaymentType_M>(
+            "SELECT id, name FROM Payment_Types ORDER BY name ASC",
+            transaction: trans);
+
+        // 4) User Treasury
+        var userTreasury = await db.QueryAsync<UserTreasury_M>(
+            @"SELECT id, user_id AS UserId, currency_id AS CurrencyId, cash_account_id, check_account_id, notes
+              FROM Users_Treasury_Rights 
+              WHERE user_id = @userId AND currency_id = @currencyId",
+            new { userId, currencyId },
+            transaction: trans);
+
+        // 5) Max Voucher Number
+        string sql = type == "V"
+            ? "SELECT IFNULL(MAX(no), 0) FROM Internal_Consingment"
+            : "SELECT IFNULL(MAX(no), 0) FROM Vouchers_And_Bills WHERE type = @type";
+
+        var maxVoucherNo = await db.ExecuteScalarAsync<string>(
+            sql,
+            new { type },
+            transaction: trans);
+
+              if(maxVoucherNo=="0")maxVoucherNo = type + "00000000";
+
+        // 6) Currency Fraction Count
+        var units = await db.ExecuteScalarAsync<string>(
+            "SELECT units FROM Currency WHERE id = @id",
+            new { id = currencyId },
+            transaction: trans);
+
+        int fractionCount = !string.IsNullOrEmpty(units) ? units.Length - 1 : 0;
+
+        // 7) Delegates
+        var delegats = await db.QueryAsync<Delegate_M>(
+            "SELECT id, name FROM Delegates",
+            transaction: trans);
+
+        // 8) Copy Currency Exchange Prices
+        var _obj = await SHLAPI.Models.Currency.Currency_M.CopyCurrenciesExchangePrice(db, trans, DateTime.Now.Date);
+
+        // 9) VAT Account
+        var setting = settingList.FirstOrDefault(s => s.id == 17); // accountSId
+        int accountVatId = 0;
+        if (setting != null)
+            int.TryParse(setting.value, out accountVatId);
+
+        var query = @"
+            SELECT c.*, cp.exchange_price
+            FROM ChartOfAccount c
+            INNER JOIN Currency_prices cp ON c.currency_id = cp.currency_id
+            WHERE cp.date = @Date
+              AND c.id = @AccountId
+        ";
+
+        var taxAccountObj = (await db.QueryAsync<dynamic>(
+            query,
+            new { Date = DateTime.Now.Date, AccountId = accountVatId },
+            transaction: trans
+        )).FirstOrDefault();
+
+        return new InvoiceVoucher_M
         {
-            try
-            {
-                List<Settings_M> settingList = (List<Settings_M>)await Settings_M.GetData(db, trans);
-                // 1) Currencies
-                var currencies = await db.QueryAsync<Currency_M>(
-                    "SELECT id, name,LEN(units) AS fractionCount FROM Currency ORDER BY id ASC", transaction: trans);
+            Currencies = currencies,
+            PaymentTypes = paymentTypes,
+            UserTreasury = userTreasury,
+            MaxVoucherNo = maxVoucherNo,
+            CurrencyFractionCount = fractionCount,
+            delegates = delegats,
+            taxAccountObj = taxAccountObj
+        };
+    }
+    catch (Exception ex)
+    {
+        // optionally log error
+        return null;
+    }
+}
 
-                // 2) Payment Types
-                var paymentTypes = await db.QueryAsync<PaymentType_M>(
-                    "SELECT id, name FROM Payment_Types ORDER BY name ASC", transaction: trans);
-
-                // 3) User Treasury
-                var userTreasury = await db.QueryAsync<UserTreasury_M>(
-                    "SELECT id, user_id as UserId, currency_id as CurrencyId, cash_account_id ,check_account_id,notes " +
-                    "FROM Users_Treasury_Rights WHERE user_id=@userId AND currency_id=@currencyId",
-                    new { userId, currencyId },
-                    transaction: trans);
-
-                // 4) Max Voucher Number
-                string sql = type == "V"
-                    ? "SELECT ISNULL(MAX(no),0) FROM Internal_Consingment"
-                    : "SELECT ISNULL(MAX(no),0) FROM Vouchers_And_Bills WHERE type=@type";
-
-                var maxVoucherNo = await db.ExecuteScalarAsync<string>(
-                    sql,
-                    new { type },
-                    transaction: trans);
-
-                // 5) Currency Fraction Count
-                var units = await db.ExecuteScalarAsync<string>(
-                    "SELECT units FROM Currency WHERE id=@id",
-                    new { id = currencyId },
-                    transaction: trans);
-                int fractionCount = (units ?? "").Length > 0 ? units.Length - 1 : 0;
-
-
-                // 8) Delegate
-                var delegats = await db.QueryAsync<Delegate_M>(
-                    "SELECT id, name FROM Delegates",
-                    transaction: trans);
-
-
-                var _obj = await SHLAPI.Models.Currency.Currency_M.CopyCurrenciesExchangePrice(db, trans, DateTime.Now.Date);
-                var setting = settingList.FirstOrDefault(s => s.id == 17); // accountSId
-                int accountVatId = 0;
-                if (setting != null)
-                    int.TryParse(setting.value, out accountVatId);
-                var query = @"
-    SELECT c.*, cp.exchange_price
-    FROM ChartOfAccount c
-    INNER JOIN Currency_prices cp ON c.currency_id = cp.currency_id
-    WHERE cp.date = @Date
-      AND c.id = @AccountId";
-
-                var taxAccountObj = (await db.QueryAsync<dynamic>(
-                    query,
-                    new { Date = DateTime.Now.Date, AccountId = accountVatId },
-                    transaction: trans
-                )).FirstOrDefault();
-
-                return new InvoiceVoucher_M
-                {
-                    Currencies = currencies,
-                    PaymentTypes = paymentTypes,
-                    UserTreasury = userTreasury,
-                    MaxVoucherNo = maxVoucherNo,
-                    CurrencyFractionCount = fractionCount,
-                    delegates = delegats,
-                    taxAccountObj = taxAccountObj
-                };
-
-
-            }
-            catch (Exception ex)
-            {
-                // log error if needed
-                return null;
-            }
-        }
 
         public static async Task<decimal> GetUnitPriceIfCustomerHasSellingWithCost(IDbConnection db, IDbTransaction trans, int itemId)
         {
@@ -506,22 +515,28 @@ namespace SHLAPI.Models.InvoiceVoucher
 
         public static async Task<IEnumerable<dynamic>> GetCostCenters(IDbConnection db, int userId, IDbTransaction trans)
         {
-            string where = userId + "";
-            var result = await db.QueryAsync<dynamic>(
-                            "GetAllSelectedUserCostCenter_sp",
-                            new
-                            {
-                                Str1 = where,
-                                Str2 = ""
-                            },
-                            commandType: CommandType.StoredProcedure,
-                                transaction: trans
-                            );
-            var list = result.ToList();
-            return list;
+            bool onlySelected = false;
+               string sql = @"
+    SELECT DISTINCT 
+        IF(uc.cost_center_id IS NULL, 0, uc.permission) AS permission,
+        cc.id AS cost_center_id,
+        cc.code,
+        cc.name,
+        IF(uc.is_defualt IS NULL, 0, uc.is_defualt) AS is_default
+    FROM Cost_Center cc
+    LEFT JOIN User_CostCenter uc 
+        ON cc.id = uc.cost_center_id 
+        AND uc.user_id = @userId
+    WHERE (cc.State = '0' OR cc.State IS NULL)
+    ";
+
+    if (onlySelected)
+        sql += " AND IF(uc.permission IS NULL, 0, uc.permission) = 1";
+
+    return await db.QueryAsync<dynamic>(sql, new { userId },trans);
         }
 
-        public static async Task<IEnumerable<dynamic>> GetStores(IDbConnection db, int userId, IDbTransaction trans)
+        public static async Task<IEnumerable<dynamic>> GetStoresOld(IDbConnection db, int userId, IDbTransaction trans)
         {
             string where = userId + "";
             var result = await db.QueryAsync<dynamic>(
@@ -537,6 +552,48 @@ namespace SHLAPI.Models.InvoiceVoucher
             var list = result.ToList();
             return list;
         }
+
+        public static async Task<IEnumerable<dynamic>> GetStores(
+   IDbConnection db, int userId, IDbTransaction trans,
+    bool onlyTruePermissions = false) // corresponds to Str2
+{
+    try
+    {
+        // Base query
+        string sql = @"
+            SELECT 
+                CASE 
+                    WHEN us.store_id IS NULL THEN TRUE
+                    ELSE us.permission 
+                END AS permission,
+                s.id AS stores_id,
+                s.name
+            FROM Stores s
+            LEFT JOIN Users_Stores us 
+                ON s.id = us.store_id 
+                AND us.user_id = @UserId
+            WHERE s.status = 0";
+
+        // Add filter for only TRUE permissions if requested (Str2 was not empty)
+        if (onlyTruePermissions)
+        {
+            sql += " AND (us.store_id IS NULL OR us.permission = TRUE)";
+        }
+
+        var res = await db.QueryAsync<dynamic>(
+            sql,
+            new { UserId = userId },
+            transaction: trans
+        );
+
+        return res;
+    }
+    catch (Exception ex)
+    {
+        throw;
+    }
+}
+
 
 
 

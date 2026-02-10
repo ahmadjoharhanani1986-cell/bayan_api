@@ -22,28 +22,28 @@ namespace SHLAPI.Models.Authentication
         public bool isdisabled  { get; set; }
         public bool islocked { get; set; }
 
-        public static async Task<AuthenticationResult> CheckAuthentication(IDbConnection db, IDbConnection dbShamelRealData, string login_name, string pwd)
+        public static async Task<AuthenticationResult> CheckAuthentication(IDbConnection dbBayan, string login_name, string pwd)
         {
             AuthenticationResult result = new AuthenticationResult(false) { };
 
-            string checkUserSelect = @" SELECT id FROM Security_000123.Users where Logon_Name =@login_name";
-            int userId = await db.ExecuteScalarAsync<int>(checkUserSelect, new { login_name });
+          string sql = "SELECT ID FROM MainUsers WHERE Logon_Name = @login_name LIMIT 1";
+int? userId = await dbBayan.ExecuteScalarAsync<int?>(sql, new { login_name });
 
             if (userId == 0) return result;
 
             var hashedPWD = Get_Secur_Password(pwd);
-            string selectUser = " select id from Security_000123.Users where Logon_Name=@login_name and password=@pwd ";
-            int userIdByPass = await db.ExecuteScalarAsync<int>(selectUser, new { login_name, pwd = hashedPWD });
+            string selectUser = " select id from MainUsers where Logon_Name=@login_name and password=@pwd ";
+            int userIdByPass = await dbBayan.ExecuteScalarAsync<int>(selectUser, new { login_name, pwd = hashedPWD });
             if (userIdByPass == 0) return result;
 
             string selectStatment = @" select *, logon_Name as user_name,
                    SuperAdmin as  supperAdmin,
                  is_disabled as  isdisabled,
                   Is_Locked as islocked 
-             from  Security_000123.Users
+             from  MainUsers
              where Logon_Name =@login_name  and password=@pwd and status = 1";
 
-            var res = await db.QueryAsync<Authentication_M>(selectStatment, new { login_name, pwd = hashedPWD });
+            var res = await dbBayan.QueryAsync<Authentication_M>(selectStatment, new { login_name, pwd = hashedPWD });
             List<Authentication_M> list = res.AsList();
             if (login_name.Trim().ToLower() == "test")
             {
@@ -60,7 +60,7 @@ namespace SHLAPI.Models.Authentication
                     {
 
                         string token = StringUtil.RandomString(100);
-                        if (await UpdateToken(dbShamelRealData, token, userObj.id))
+                        if (await UpdateToken(dbBayan, token, userObj.id))
                         {
                             result.isSucceeded = true;
                             result.user_name = userObj.user_name;
@@ -70,7 +70,7 @@ namespace SHLAPI.Models.Authentication
                             result.user_id = userObj.id;
                             result.language_id = userObj.language_id;
                             if (userObj.supperAdmin) result.userActiveInWeb = true;
-                            else result.userActiveInWeb = await CheckIsUserForWeb(dbShamelRealData, userObj.id);
+                            else result.userActiveInWeb = await CheckIsUserForWeb(dbBayan, userObj.id);
                         }
                     }
 

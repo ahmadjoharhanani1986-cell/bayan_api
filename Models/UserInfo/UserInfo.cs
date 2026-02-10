@@ -5,29 +5,36 @@ namespace SHLAPI.Models.UserInfo
 {
     public class UserInfo_M
     {
-        public static async Task<IEnumerable<dynamic>> GetData(IDbConnection db, IDbTransaction trans, int userId)
-        {
-            try
-            {
-                string where = $" user_id = {userId}";
-                string spName = "sp_User_Profile_GetAllByWhere";
-                var param = new
-                {
-                    where
-                };
-                var res = await db.QueryAsync<dynamic>(
-                     spName,
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                return res;
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
-        }
+ public static async Task<IEnumerable<dynamic>> GetData(IDbConnection db, IDbTransaction trans, int userId)
+{
+    try
+    {
+        string sql = @"
+            SELECT 
+                id, user_id, open_new_tab, load_all_data, on_space_or_backspace, include_tax_onPriceEntry,
+                on_text_change, open_as_float_window, can_update_pay_price, Open_ScreenMoreThanOneTime, purchase_discount,
+                sell_discount, CanChangeSellPrice, appeare_item_cost, appeare_item_cost_sell, appeare_item_cost_pos,
+                user_name, expand_item_space, OpenOperatrionWindow, DefaultOperation, can_edit_pay_bill, limit_debit,
+                appeare_invoice_search_pos, discount_limit_percent, dashboards_refresh, appeare_internal_transfer_screen,
+                check_backup_when_colsed, update_Invoice_date, can_move_dock_control, dont_alert_when_unit_price_less_than_pay,
+                visible_purchase_price_in_item, com_port_name, dontAddItemWhenNotHaveBarCode, token, chkVisibleSearchCashAccountQabd
+            FROM User_Profile
+            WHERE user_id = @userId";
+
+        var res = await db.QueryAsync<dynamic>(
+            sql,
+            new { userId },
+            transaction: trans
+        );
+
+        return res;
+    }
+    catch (Exception ex)
+    {
+        throw;
+    }
+}
+
         public static async Task<IEnumerable<dynamic>> GetUserDashboards(IDbConnection db, int userId,
            IDbTransaction? trans = null)
         {
@@ -53,7 +60,7 @@ namespace SHLAPI.Models.UserInfo
                    SuperAdmin as  supperAdmin,
                  is_disabled as  isdisabled,
                   Is_Locked as islocked 
-             from  Security_000123.Users
+             from  mainUsers
              where id=@userId ";
 
                 var res = await db.QueryAsync<Authentication_M>(selectStatment, new { userId },trans);

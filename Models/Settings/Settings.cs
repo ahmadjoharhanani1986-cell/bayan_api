@@ -16,19 +16,14 @@ namespace SHLAPI.Models.Settings
         {
             try
             {
-                string where = " 1=1 order by id asc";   
-                string spName = "sp_SL_setting_GetAllByWhere";
-                var param = new
-                {
-                  where
-                };
-                var res = await db.QueryAsync<Settings_M>(
-                     spName,
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                return res;
+               string sql = @"SELECT id, description, type, value 
+               FROM SL_setting 
+               WHERE 1=1 
+               ORDER BY id ASC";
+
+return await db.QueryAsync<Settings_M>(sql, transaction: trans);
+
+               
             }
             catch (Exception EX)
             {

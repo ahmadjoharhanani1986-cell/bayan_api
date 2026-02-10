@@ -7,8 +7,6 @@ namespace SHLAPI
     {
         private const string FILE_NAME = "api.config.json";
         public string ConnectionString { get; set; }
-        public string MasterConnectionString { get; set; }
-        public string CRMApiUrl { get; set; }
 
         private static Config _config = null;
 

@@ -16,19 +16,18 @@ namespace SHLAPI.Features
 
         public class QueryHandler : FeatureHandlerBase,IRequestHandler<Query, AuthenticationResult>
         {
-            IMasterDatabase conMaster;
-            public QueryHandler(IShamelDatabase _con,IMasterDatabase conMaster) : base(_con)
+            public QueryHandler(IShamelDatabase _con) : base(_con)
             {
-                _conMaster = conMaster;
+              
             }
 
             public async Task<AuthenticationResult> Handle(Query request, CancellationToken cancellationToken)
             {
-                using (var db = _conMaster.Open())
+                //using (var db = _conMaster.Open())
                 {
                     using (var dbShamelRealData = _con.Open())
                     {
-                        var result = await Authentication_M.CheckAuthentication(db, dbShamelRealData, request.login_name, request.pwd);
+                        var result = await Authentication_M.CheckAuthentication( dbShamelRealData, request.login_name, request.pwd);
 
                         return result;
                     }

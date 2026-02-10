@@ -88,77 +88,102 @@ namespace SHLAPI.Models.Currency
             return null;
         }
 
-        public static async Task<bool> CopyCurrenciesExchangePrice(IDbConnection db, IDbTransaction trans, DateTime _date)
-        {
-            DateTime nowDate = _date;
-            nowDate = new DateTime(nowDate.Year, nowDate.Month, nowDate.Day, 00, 00, 00);
-            nowDate = DateTime.SpecifyKind(nowDate, DateTimeKind.Utc);
-            var param = new
-            {
-                dateTime1 = nowDate
-            };
-            var res = await db.QueryAsync<int>(
-                 "Copy_Rates_sp",
-                 param,
-                 transaction: trans,
-                commandType: CommandType.StoredProcedure
-            );
-            if (res != null && res.AsList().Count > 0 && res.AsList()[0]==1)
-                return true;
+    public static async Task<bool> CopyCurrenciesExchangePrice(IDbConnection db, IDbTransaction trans, DateTime _date)
+{
+    // Normalize the date to midnight
+    DateTime nowDate = new DateTime(_date.Year, _date.Month, _date.Day, 0, 0, 0, DateTimeKind.Utc);
 
-            return false;
-        }
+    // Parameters object
+    var param = new
+    {
+        in_date = nowDate // MySQL procedure parameter name
+    };
 
-        public static async Task<double> GetCurrencyExchangePrice(IDbConnection db, IDbTransaction trans, int currencyId, DateTime _date)
-        {
-            DateTime nowDate = _date;
-       
-            nowDate = new DateTime(nowDate.Year, nowDate.Month, nowDate.Day, 00, 00, 00);
-            string sqlDate = nowDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-            string where = " where currency_id=" + currencyId + " and date='" + sqlDate + "' ";
-            var param = new
-            {
-                where
-            };
-            try
-            {
-                var res = await db.QueryAsync<double>(
-                     "Currency_Price_sp",
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                            if (res != null && res.AsList().Count > 0)
-                return res.AsList()[0];
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
-            return 0;
-        }
-        public static async Task<IEnumerable<dynamic>> GetUsersTreasuryRightsBoxes(IDbConnection db, IDbTransaction trans, int currencyId, int userId)
-        {
-            string where = " 1=1 and Users_Treasury_Rights.currency_id=" + currencyId + " and  Users_Treasury_Rights.user_id=" + userId + "";
-            var param = new
-            {
-                where
-            };
-            try
-            {
-                var res = await db.QueryAsync<dynamic>(
-                     "GetUsers_Treasury_RightsAllData_sp",
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                return res;
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
-        }
+    try
+    {
+        // Call the MySQL procedure
+        var res = await db.QueryAsync<int>(
+            "Copy_Rates", // MySQL procedure name
+            param,
+            transaction: trans,
+            commandType: CommandType.StoredProcedure
+        );
+
+        // Check if result returned 1 (inserted)
+        if (res != null && res.AsList().Count > 0 && res.AsList()[0] == 1)
+            return true;
+
+        return false;
+    }
+    catch (Exception ex)
+    {
+        // Optional: log ex
+        throw;
+    }
+}
+
+
+public static async Task<double> GetCurrencyExchangePrice(IDbConnection db, IDbTransaction trans, int currencyId, DateTime date)
+{
+    // Normalize the date to remove time
+    DateTime nowDate = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0);
+
+    string sql = @"
+        SELECT exchange_price
+        FROM Currency_prices
+        WHERE currency_id = @CurrencyId
+          AND date = @Date
+        LIMIT 1;
+    ";
+
+    var param = new
+    {
+        CurrencyId = currencyId,
+        Date = nowDate
+    };
+
+    try
+    {
+        // QuerySingleOrDefaultAsync ensures we get one value or 0
+        double? price = await db.QueryFirstOrDefaultAsync<double?>(sql, param, trans);
+        return price ?? 0; // Return 0 if null
+    }
+    catch (Exception ex)
+    {
+        throw;
+    }
+}
+
+public static async Task<IEnumerable<dynamic>> GetUsersTreasuryRightsBoxes(IDbConnection db, IDbTransaction trans, int currencyId, int userId)
+{
+    string sql = @"
+        SELECT *
+        FROM Users_Treasury_Rights
+        WHERE currency_id = @CurrencyId
+          AND user_id = @UserId;
+    ";
+
+    var param = new
+    {
+        CurrencyId = currencyId,
+        UserId = userId
+    };
+
+    try
+    {
+        var res = await db.QueryAsync<dynamic>(
+            sql,
+            param,
+            transaction: trans
+        );
+        return res;
+    }
+    catch (Exception ex)
+    {
+        throw;
+    }
+}
+
    
    
    

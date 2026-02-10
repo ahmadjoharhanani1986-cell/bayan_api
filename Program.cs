@@ -24,7 +24,6 @@ builder.Services.AddControllers();
 builder.Services.AddResponseCompression();
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddSingleton<IShamelDatabase, ShamelDatabase>();
-builder.Services.AddSingleton<IMasterDatabase, MasterDatabase>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
 

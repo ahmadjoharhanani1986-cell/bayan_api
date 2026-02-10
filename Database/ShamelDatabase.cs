@@ -1,14 +1,12 @@
-using System;
-using System.Collections.Generic;
+using MySqlConnector;   // مهم
 using System.Data;
-using System.Data.SqlClient;
-
 
 namespace SHLAPI.Database
 {
     public class ShamelDatabase : IShamelDatabase
     {
         private static string connectionString = null;
+
         public IDbConnection Open()
         {
             try
@@ -17,15 +15,19 @@ namespace SHLAPI.Database
                 {
                     connectionString = Config.GetInstance().ConnectionString;
                 }
+
                 Serilog.Log.Information("ConnectionString " + connectionString);
-                var con = new SqlConnection(connectionString);
+
+                var con = new MySqlConnection(connectionString);
                 con.Open();
                 return con;
             }
-            catch(Exception ex) {
-                throw ex;
+            catch (Exception ex)
+            {
+                throw;
             }
         }
+
         public IDbTransaction BeginTransaction(IDbConnection con)
         {
             return con.BeginTransaction();

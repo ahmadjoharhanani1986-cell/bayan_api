@@ -15,8 +15,8 @@ namespace SHLAPI.Features.UserInfo
         }
         public class QueryHandler : IRequestHandler<Query, Result>
         {
-            IMasterDatabase _con;
-            public QueryHandler(IMasterDatabase con) => _con = con;
+            IShamelDatabase _con;
+            public QueryHandler(IShamelDatabase con) => _con = con;
             public async Task<Result> Handle(Query request, CancellationToken cancellationToken)
             {
                 using (var db = _con.Open())
