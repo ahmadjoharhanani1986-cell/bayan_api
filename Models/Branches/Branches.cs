@@ -7,35 +7,64 @@ namespace SHLAPI.Models.Branches
         public int id { get; set; }
         public string no { get; set; }
         public string name { get; set; }
-        public static async Task<IEnumerable<dynamic>> GetData(IDbConnection db, IDbTransaction trans, string code,int bankId)
+public static async Task<IEnumerable<dynamic>> GetData(
+    IDbConnection db,
+    IDbTransaction trans,
+    string code,
+    int bankId)
+{
+    try
+    {
+        string sql = @"
+        SELECT 
+            id,
+            no,
+            name,
+            parent_bank_id,
+            region_id,
+            address,
+            phone_no,
+            fax_no,
+            telefax,
+            email,
+            pobox,
+            manager_name,
+            manager_contact_info,
+            note
+        FROM Bank_branches
+        WHERE 1=1";
+
+        var param = new DynamicParameters();
+
+        if (!string.IsNullOrEmpty(code))
         {
-            try
-            {
-                string where = string.Format(" 1=1 and no='{0}' ", code);
-                if (code == null || string.IsNullOrEmpty(code))
-                {
-                    where = " 1=1  ";
-                }
-                where += string.Format(" and parent_bank_id={0} order by id asc",bankId);
-                string spName = "sp_Bank_branches_GetAllByWhere";
-                var param = new
-                {
-                    where
-                };
-                var res = await db.QueryAsync<dynamic>(
-                     spName,
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                return res;
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
+            sql += " AND no = @code ";
+            param.Add("@code", code);
         }
-   
+
+        if (bankId > 0)
+        {
+            sql += " AND parent_bank_id = @bankId ";
+            param.Add("@bankId", bankId);
+        }
+
+        sql += " ORDER BY id ASC;";
+
+        var res = await db.QueryAsync<dynamic>(
+            sql,
+            param,
+            transaction: trans,
+            commandType: CommandType.Text
+        );
+
+        return res;
+    }
+    catch
+    {
+        throw;
+    }
+}
+
    
     }
 }

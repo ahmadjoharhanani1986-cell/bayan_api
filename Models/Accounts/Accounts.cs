@@ -13,39 +13,73 @@ namespace SHLAPI.Models.Accounts
         public int id { get; set; }
         public string no { get; set; }
         public string name { get; set; }
-        public static async Task<IEnumerable<Accounts_M>> GetData(IDbConnection db, IDbTransaction trans, GetAccountsF.Query req)
+public static async Task<IEnumerable<Accounts_M>> GetData(
+    IDbConnection db,
+    IDbTransaction trans,
+    GetAccountsF.Query req)
+{
+    try
+    {
+        string sql = @"
+        SELECT 
+            id,
+            no,
+            name,
+            '' AS address,
+            '' AS mobile
+        FROM ChartOfAccount
+        WHERE 
+            (Code <> 'A' 
+            OR (Code = 'A' AND id NOT IN (
+                SELECT parent_account_id 
+                FROM ChartOfAccount 
+                WHERE parent_account_id <> id
+            )))
+        ";
+
+        var param = new DynamicParameters();
+
+        if (req.currency_id > 0)
         {
-            try
-            {
-
-                string sqlStat = "";
-                if (req.currency_id > 0) sqlStat += @" and ChartOfAccount.currency_id={0}";
-                if (req.from_code != null && req.from_code.Trim().Length > 0) sqlStat += @" and ChartOfAccount.no>={1}";
-                if (req.to_code != null && req.to_code.Trim().Length > 0) sqlStat += @" and ChartOfAccount.no<={2}";
-                if (req.accountPrefix != null && req.accountPrefix.Trim().Length > 0) sqlStat += @" and ChartOfAccount.Code='{3}'";
-                string where = string.Format(sqlStat, req.currency_id, req.from_code, req.to_code, req.accountPrefix);
-
-                string spName = "ChartOfAccount_SOA__sp";
-                if (req.accountPrefix == "C" || req.accountPrefix == "S") spName = "ChartOfAccount_SOA_WithDelegates_sp";
-                var param = new
-                {
-                    where
-                };
-                var res = await db.QueryAsync<Accounts_M>(
-                     spName,
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                var orderedRes = res.OrderBy(r => r.no).ToList();
-                return orderedRes;
-            }
-            catch (Exception EX)
-            {
-
-            }
-            return null;
+            sql += " AND currency_id = @currency_id ";
+            param.Add("@currency_id", req.currency_id);
         }
+
+        if (!string.IsNullOrEmpty(req.from_code))
+        {
+            sql += " AND no >= @from_code ";
+            param.Add("@from_code", req.from_code);
+        }
+
+        if (!string.IsNullOrEmpty(req.to_code))
+        {
+            sql += " AND no <= @to_code ";
+            param.Add("@to_code", req.to_code);
+        }
+
+        if (!string.IsNullOrEmpty(req.accountPrefix))
+        {
+            sql += " AND Code = @prefix ";
+            param.Add("@prefix", req.accountPrefix);
+        }
+
+        sql += " ORDER BY no ASC;";
+
+        var res = await db.QueryAsync<Accounts_M>(
+            sql,
+            param,
+            transaction: trans,
+            commandType: CommandType.Text
+        );
+
+        return res.ToList();
+    }
+    catch
+    {
+        throw;
+    }
+}
+
         public static async Task<IEnumerable<dynamic>> GetAccountBalance(IDbConnection db, GetAccountBalanceF.Query request, IDbTransaction trans)
         {
             // --@Int321 int=> CurrID ,@Int322=> isBaseCurr ,@DateTime1 datetime=> ToDate
@@ -126,156 +160,196 @@ public class AccountBalanceResult
     }
     public class SearchAccount_M
     {
-    
-﻿     public static async Task<IEnumerable<dynamic>> SearchAccounts(IDbConnection db, IDbTransaction trans,SearchAccountsF.Query query)
+    public static async Task<IEnumerable<dynamic>> SearchAccounts(
+    IDbConnection db, 
+    IDbTransaction trans, 
+    SearchAccountsF.Query query)
+{
+    var sql = new StringBuilder("SELECT * FROM " + query.tableName + " WHERE 1=1 ");
+    var parameters = new DynamicParameters();
+
+    // Additional conditions (⚠ يجب التأكد أنها آمنة أو من النظام فقط)
+    if (!string.IsNullOrWhiteSpace(query.additionalConditions))
+        sql.Append(" AND " + query.additionalConditions);
+
+    // Search name
+    if (!string.IsNullOrWhiteSpace(query.accountName))
+    {
+        var words = query.accountName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        for (int i = 0; i < words.Length; i++)
         {
-            try
-            {
-                string _fillter = " where 1=1 ";                      //MLHIDE
-                if (query.additionalConditions !=null && query.additionalConditions.Trim() != "")
-                {
-                    _fillter += " and " + query.additionalConditions;      //MLHIDE 
-                }
-                string Account_Name = query.accountName ==null ?"":query.accountName ;//.Trim();
-                bool IsTotalSearch = true;
-                bool IsSearchFromBegin = false;
-                bool IsSearchFromEnd = false;
-                bool IsSearchForAll = true;
-                bool _doColumnNo = true;
-                #region Old View
-                if (!query.newViewProp)
-                {
-                    string s = query.accountName != null ?query.accountName : "";
-                    string[] ArrOfAccount_Name = Account_Name.Trim().Split(' ');
-                    if (ArrOfAccount_Name.Length != 0)
-                    {
-                        if (Account_Name.Trim() != "")
-                        {
-                            if (_fillter.Contains("where"))           // //MLHIDE
-                            {
-                                _fillter += " and";                   // //MLHIDE
-                            }
-                            else
-                            {
-                                _fillter += " where";                 // //MLHIDE
-                            }
-                        }
-                        for (int i = 0; i < ArrOfAccount_Name.Length; i++)
-                        {
-                            if (ArrOfAccount_Name[i].Trim() == "")
-                            {
-                                continue;
-                            }
-                            if (!IsTotalSearch)
-                            {
-                                _fillter += "  (Replace(name_DynSearch,'ه','ة')  like "; // //MLHIDE
-                            }
-                            else
-                            {
-                                _fillter += "  (Replace(name_DynSearch,'ه','ة')  like "; // //MLHIDE
-                            }
-                            if (IsSearchFromBegin)
-                            {
-                                _fillter += " Replace(N'" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'" + ArrOfAccount_Name[i] + "%'"; // //MLHIDE
-
-                            }
-                            else if (IsSearchFromEnd)
-                            {
-                                _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "') "; // //MLHIDE
-                            }
-                            else if (IsSearchForAll)
-                            {
-                                _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "%') "; // //MLHIDE
-                            }
-
-                            if (ArrOfAccount_Name.Length > 1 && i + 1 < ArrOfAccount_Name.Length)
-                            {
-                                _fillter += " and  ";                  // //MLHIDE
-                            }
-                        }
-                    }
-                }
-                #endregion
-                #region New View
-                if (query.newViewProp)
-                {
-                    string s = query.accountName != null ? query.accountName:"";
-                    string[] ArrOfAccount_Name = Account_Name.Trim().Split(' ');
-                    if (ArrOfAccount_Name.Length != 0)
-                    {
-                        if (Account_Name.Trim() != "")
-                        {
-                            if (_fillter.Contains("where"))            // //MLHIDE
-                            {
-                                _fillter += " and";                    // //MLHIDE
-                            }
-                            else
-                            {
-                                _fillter += " where";                  // //MLHIDE
-                            }
-                        }
-                        for (int i = 0; i < ArrOfAccount_Name.Length; i++)
-                        {
-                            if (ArrOfAccount_Name[i].Trim() == "")
-                            {
-                                continue;
-                            }
-                            if (!IsTotalSearch)
-                            {
-                                _fillter += "  (Replace(name,'ه','ة')  like "; // //MLHIDE
-                            }
-                            else
-                            {
-                                _fillter += "  (Replace(name,'ه','ة')  like "; // //MLHIDE
-                            }
-                            if (IsSearchFromBegin)
-                            {
-                                _fillter += " Replace(N'" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'" + ArrOfAccount_Name[i] + "%'"; // //MLHIDE
-
-                            }
-                            else if (IsSearchFromEnd)
-                            {
-                                _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "') "; // //MLHIDE
-                            }
-                            else if (IsSearchForAll)
-                            {
-                                _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "%') "; // //MLHIDE
-                            }
-
-                            if (ArrOfAccount_Name.Length > 1 && i + 1 < ArrOfAccount_Name.Length)
-                            {
-                                _fillter += " and  ";                  // //MLHIDE
-                            }
-                        }
-                    }
-                }
-                #endregion
-                if (query.isFillteredByStopped)
-                {
-                    if (_fillter.Trim() != "")
-                        _fillter += " and ";                           //MLHIDE
-                    else _fillter += " where ";                        //MLHIDE
-                    _fillter += " stop_transactions='false' ";         //MLHIDE
-                }
-                if (query.isAccount)
-                {
-                    _fillter += " and code ='A'";
-                }
-                else
-                {
-                    _fillter += " and code <> 'A'";
-                }
-                if (_doColumnNo)
-                    _fillter += " order by no";                            // //MLHIDE
-
-                var dtAccountSearch = await VoucherQabdSarfGetData_M.GetByDynamicSearchSp(db, query.tableName, _fillter, "*", trans);
-                return dtAccountSearch;
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
+            string paramName = $"@name{i}";
+            sql.Append($" AND (REPLACE(name,'ه','ة') LIKE {paramName} OR no LIKE {paramName})");
+            parameters.Add(paramName, $"%{words[i]}%");
         }
+    }
+
+    // Filter stopped accounts
+    if (query.isFillteredByStopped)
+        sql.Append(" AND stop_transactions = 0");
+
+    // Account type
+    if (query.isAccount)
+        sql.Append(" AND code = 'A'");
+    else
+        sql.Append(" AND code <> 'A'");
+
+    // Order
+    sql.Append(" ORDER BY no");
+
+    return await db.QueryAsync<dynamic>(sql.ToString(), parameters, transaction: trans);
+}
+
+// ﻿     public static async Task<IEnumerable<dynamic>> SearchAccounts(IDbConnection db, IDbTransaction trans,SearchAccountsF.Query query)
+//         {
+//             try
+//             {
+//                 string _fillter = " where 1=1 ";                      //MLHIDE
+//                 if (query.additionalConditions !=null && query.additionalConditions.Trim() != "")
+//                 {
+//                     _fillter += " and " + query.additionalConditions;      //MLHIDE 
+//                 }
+//                 string Account_Name = query.accountName ==null ?"":query.accountName ;//.Trim();
+//                 bool IsTotalSearch = true;
+//                 bool IsSearchFromBegin = false;
+//                 bool IsSearchFromEnd = false;
+//                 bool IsSearchForAll = true;
+//                 bool _doColumnNo = true;
+//                 #region Old View
+//                 if (!query.newViewProp)
+//                 {
+//                     string s = query.accountName != null ?query.accountName : "";
+//                     string[] ArrOfAccount_Name = Account_Name.Trim().Split(' ');
+//                     if (ArrOfAccount_Name.Length != 0)
+//                     {
+//                         if (Account_Name.Trim() != "")
+//                         {
+//                             if (_fillter.Contains("where"))           // //MLHIDE
+//                             {
+//                                 _fillter += " and";                   // //MLHIDE
+//                             }
+//                             else
+//                             {
+//                                 _fillter += " where";                 // //MLHIDE
+//                             }
+//                         }
+//                         for (int i = 0; i < ArrOfAccount_Name.Length; i++)
+//                         {
+//                             if (ArrOfAccount_Name[i].Trim() == "")
+//                             {
+//                                 continue;
+//                             }
+//                             if (!IsTotalSearch)
+//                             {
+//                                 _fillter += "  (Replace(name_DynSearch,'ه','ة')  like "; // //MLHIDE
+//                             }
+//                             else
+//                             {
+//                                 _fillter += "  (Replace(name_DynSearch,'ه','ة')  like "; // //MLHIDE
+//                             }
+//                             if (IsSearchFromBegin)
+//                             {
+//                                 _fillter += " Replace(N'" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'" + ArrOfAccount_Name[i] + "%'"; // //MLHIDE
+
+//                             }
+//                             else if (IsSearchFromEnd)
+//                             {
+//                                 _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "') "; // //MLHIDE
+//                             }
+//                             else if (IsSearchForAll)
+//                             {
+//                                 _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "%') "; // //MLHIDE
+//                             }
+
+//                             if (ArrOfAccount_Name.Length > 1 && i + 1 < ArrOfAccount_Name.Length)
+//                             {
+//                                 _fillter += " and  ";                  // //MLHIDE
+//                             }
+//                         }
+//                     }
+//                 }
+//                 #endregion
+//                 #region New View
+//                 if (query.newViewProp)
+//                 {
+//                     string s = query.accountName != null ? query.accountName:"";
+//                     string[] ArrOfAccount_Name = Account_Name.Trim().Split(' ');
+//                     if (ArrOfAccount_Name.Length != 0)
+//                     {
+//                         if (Account_Name.Trim() != "")
+//                         {
+//                             if (_fillter.Contains("where"))            // //MLHIDE
+//                             {
+//                                 _fillter += " and";                    // //MLHIDE
+//                             }
+//                             else
+//                             {
+//                                 _fillter += " where";                  // //MLHIDE
+//                             }
+//                         }
+//                         for (int i = 0; i < ArrOfAccount_Name.Length; i++)
+//                         {
+//                             if (ArrOfAccount_Name[i].Trim() == "")
+//                             {
+//                                 continue;
+//                             }
+//                             if (!IsTotalSearch)
+//                             {
+//                                 _fillter += "  (Replace(name,'ه','ة')  like "; // //MLHIDE
+//                             }
+//                             else
+//                             {
+//                                 _fillter += "  (Replace(name,'ه','ة')  like "; // //MLHIDE
+//                             }
+//                             if (IsSearchFromBegin)
+//                             {
+//                                 _fillter += " Replace(N'" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'" + ArrOfAccount_Name[i] + "%'"; // //MLHIDE
+
+//                             }
+//                             else if (IsSearchFromEnd)
+//                             {
+//                                 _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "') "; // //MLHIDE
+//                             }
+//                             else if (IsSearchForAll)
+//                             {
+//                                 _fillter += " Replace(N'%" + ArrOfAccount_Name[i] + "%','ه','ة') or no like N'%" + ArrOfAccount_Name[i] + "%') "; // //MLHIDE
+//                             }
+
+//                             if (ArrOfAccount_Name.Length > 1 && i + 1 < ArrOfAccount_Name.Length)
+//                             {
+//                                 _fillter += " and  ";                  // //MLHIDE
+//                             }
+//                         }
+//                     }
+//                 }
+//                 #endregion
+//                 if (query.isFillteredByStopped)
+//                 {
+//                     if (_fillter.Trim() != "")
+//                         _fillter += " and ";                           //MLHIDE
+//                     else _fillter += " where ";                        //MLHIDE
+//                     _fillter += " stop_transactions='false' ";         //MLHIDE
+//                 }
+//                 if (query.isAccount)
+//                 {
+//                     _fillter += " and code ='A'";
+//                 }
+//                 else
+//                 {
+//                     _fillter += " and code <> 'A'";
+//                 }
+//                 if (_doColumnNo)
+//                     _fillter += " order by no";                            // //MLHIDE
+
+//                 var dtAccountSearch = await VoucherQabdSarfGetData_M.GetByDynamicSearchSp(db, query.tableName, _fillter, "*", trans);
+//                 return dtAccountSearch;
+//             }
+//             catch (Exception EX)
+//             {
+//                 throw;
+//             }
+//         }
 
 
 

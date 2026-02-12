@@ -7,33 +7,42 @@ namespace SHLAPI.Models.Banks
         public int id { get; set; }
         public string no { get; set; }
         public string name { get; set; }
-        public static async Task<IEnumerable<dynamic>> GetData(IDbConnection db, IDbTransaction trans, string code)
+      public static async Task<IEnumerable<dynamic>> GetData(
+    IDbConnection db, 
+    IDbTransaction trans, 
+    string code)
+{
+    try
+    {
+        string sql = @"SELECT id, no, name, web_site, notes 
+                       FROM Banks 
+                       WHERE 1=1 ";
+
+        var param = new DynamicParameters();
+
+        if (!string.IsNullOrEmpty(code))
         {
-            try
-            {
-                string where = string.Format(" 1=1 and no='{0}' order by id asc", code);
-                if (code == null || string.IsNullOrEmpty(code))
-                {
-                    where = " 1=1  order by id asc";
-                }
-                string spName = "sp_Banks_GetAllByWhere";
-                var param = new
-                {
-                    where
-                };
-                var res = await db.QueryAsync<dynamic>(
-                     spName,
-                     param,
-                     transaction: trans,
-                    commandType: CommandType.StoredProcedure
-                );
-                return res;
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
+            sql += " AND no = @code ";
+            param.Add("@code", code);
         }
+
+        sql += " ORDER BY id ASC;";
+
+        var res = await db.QueryAsync<dynamic>(
+            sql,
+            param,
+            transaction: trans,
+            commandType: CommandType.Text
+        );
+
+        return res;
+    }
+    catch
+    {
+        throw;
+    }
+}
+
    
    
     }

@@ -379,28 +379,56 @@ public int lp_price_curr { get; set; }
 
         }
 
-        public static async Task<IEnumerable<dynamic>> GetItemAdditional(IDbConnection db, int itemId, IDbTransaction? trans = null)
-        {
-            try
-            {
-                string where = string.Format(" Items_Additionals.item_id={0}", itemId);
-                var result = await db.QueryAsync<dynamic>(
-                    "ItemMainAdditional_ByWhere_sp", // اسم الـ SP
-                    new
-                    {
-                      Str1 =  where
-                    },
-                    commandType: CommandType.StoredProcedure,
-                    transaction: trans
-                );
+      public static async Task<IEnumerable<dynamic>> GetItemAdditional(
+    IDbConnection db,
+    int itemId,
+    IDbTransaction? trans = null)
+{
+    try
+    {
+        string sql = @"
+        SELECT 
+            DENSE_RANK() OVER (ORDER BY ia.id ASC) AS row_no,
+            ias.ID AS ItemID,
+            ias.No AS ItemNo,
+            ias.Name AS ItemName,
+            u.name AS _mainUnitName,
+            iu.item_unit_pay_price AS _mainUnitPrice,
+            ia.price_percent,
+            iu.item_unit_pay_price * (ia.price_percent / 100) * ia.qty AS totalPrice,
+            isa.item_option,
+            IFNULL(isa.add_additional_item_manual_in_invoice, 'false') AS add_additional_item_manual_in_invoice,
+            ia.qty,
+            ia.unit_id AS _mainUnitId,
+            iu.item_unit_pay_price * (ia.price_percent / 100) AS unitPrice
+        FROM Items_Additionals ia
+        INNER JOIN Items_and_services ias 
+            ON ias.ID = ia.additional_item_id
+        INNER JOIN Items_and_services isa 
+            ON isa.ID = ia.item_id
+        INNER JOIN Items_units iu 
+            ON iu.item_id = ia.additional_item_id 
+           AND iu.unit_id = ia.unit_id
+        LEFT JOIN Units u 
+            ON u.id = ia.unit_id
+        WHERE ia.item_id = @itemId;
+        ";
 
-                return result.ToList();
-            }
-            catch (Exception EX)
-            {
-                throw;
-            }
-        }
+        var result = await db.QueryAsync<dynamic>(
+            sql,
+            new { itemId },
+            transaction: trans,
+            commandType: CommandType.Text
+        );
+
+        return result.ToList();
+    }
+    catch
+    {
+        throw;
+    }
+}
+
 
     }
 }

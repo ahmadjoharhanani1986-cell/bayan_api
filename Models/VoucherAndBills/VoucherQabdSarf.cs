@@ -1439,32 +1439,55 @@ return new VoucherQabdSarf_M
             public bool result { get; set; }
             public double ExchangePrice { get; set; }
         }
-        public static async Task<GetExchangeCurrencyPriceByDateClass> GetExchangeCurrencyPriceByDate(int CurrencyId, DateTime Date, IDbConnection db, bool ThrowException, IDbTransaction trans)
-        {
+     public static async Task<GetExchangeCurrencyPriceByDateClass> GetExchangeCurrencyPriceByDate(
+    int currencyId,
+    DateTime date,
+    IDbConnection db,
+    bool throwException,
+    IDbTransaction trans = null)
+{
+    var returnObj = new GetExchangeCurrencyPriceByDateClass
+    {
+        ExchangePrice = 0,
+        result = false
+    };
 
-            GetExchangeCurrencyPriceByDateClass returnObj = new GetExchangeCurrencyPriceByDateClass();
-            returnObj.ExchangePrice = 0;
-            returnObj.result = false;
-            // ref double ExchangePrice
-            string where = string.Format(" where currency_id={0} and date='{1}' ", CurrencyId, ConvertToSeverDateTimeFormateString(Date));
-            var result = await db.QueryAsync<dynamic>(
-                            "Currency_Price_sp",
-                            new { where },
-                            commandType: CommandType.StoredProcedure,
-                                transaction: trans
-                            );
-            var list = result.ToList();
-            if (list.Count > 0)
-            {
-                returnObj.ExchangePrice = list[0].exchange_price;
-                returnObj.result = true;
-                return returnObj;
-            }
-            else
-            {
-                return returnObj;
-            }
+    try
+    {
+        // Normalize date (same logic as SQL Server)
+        date = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0);
+
+        string sql = @"
+        SELECT exchange_price
+        FROM Currency_prices
+        WHERE currency_id = @currencyId
+          AND date = @date
+        LIMIT 1;
+        ";
+
+        var price = await db.QueryFirstOrDefaultAsync<double?>(
+            sql,
+            new { currencyId, date },
+            transaction: trans
+        );
+
+        if (price.HasValue)
+        {
+            returnObj.ExchangePrice = price.Value;
+            returnObj.result = true;
         }
+
+        return returnObj;
+    }
+    catch
+    {
+        if (throwException)
+            throw;
+
+        return returnObj;
+    }
+}
+
 
 
         public static async Task<Validation_C_D_E> CheckValidation_C_D_E(IDbConnection db, IDbTransaction trans, DateTime _date, int _voucherId)
